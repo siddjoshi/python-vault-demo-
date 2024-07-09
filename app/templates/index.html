@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-5">
+    <h1 class="text-center mb-4">Dynamic Database Credentials Demo</h1>
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="card-title mb-0">Connection Status</h5>
+                </div>
+                <div class="card-body">
+                    <div id="connectionStatus"></div>
+                    <button id="connectBtn" class="btn btn-primary mt-3">Check Connection</button>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-header bg-success text-white">
+                    <h5 class="card-title mb-0">Add Sensitive Data</h5>
+                </div>
+                <div class="card-body">
+                    <form id="sensitiveDataForm">
+                        <div class="mb-3">
+                            <label for="name" class="form-label">Name</label>
+                            <input type="text" class="form-control" id="name" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="creditCard" class="form-label">Credit Card Number</label>
+                            <input type="text" class="form-control" id="creditCard" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="ssn" class="form-label">SSN</label>
+                            <input type="text" class="form-control" id="ssn" required>
+                        </div>
+                        <button type="submit" class="btn btn-success">Add Record</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header bg-info text-white">
+                    <h5 class="card-title mb-0">Credential Lifecycle</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="credentialLifecycle"></canvas>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-header bg-warning text-white">
+                    <h5 class="card-title mb-0">Recent Records (Unsecured)</h5>
+                </div>
+                <div class="card-body">
+                    <div id="recentRecords"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="row mt-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header bg-success text-white">
+                    <h5 class="card-title mb-0">Benefits of Dynamic Credentials and Vault</h5>
+                </div>
+                <div class="card-body">
+                    <ul id="benefits">
+                        <li>Automatic rotation reduces the risk of credential exposure</li>
+                        <li>Each application instance can have unique credentials</li>
+                        <li>Fine-grained access control and auditing</li>
+                        <li>Simplified credential management process</li>
+                        <li>Reduced operational overhead for security teams</li>
+                        <li>Encryption of sensitive data at rest and in transit</li>
+                        <li>Centralized secret management and access policies</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+let lifecycleChart;
+
+$(document).ready(function() {
+    $('#connectBtn').click(checkConnection);
+    initializeLifecycleChart();
+    $('#sensitiveDataForm').submit(addRecord);
+    loadRecentRecords();
+});
+
+function checkConnection() {
+    $.get('/connection-info', function(response) {
+        if (response.success) {
+            $('#connectionStatus').html(`
+                <div class="alert alert-success">
+                    ${response.message}<br>
+                    Current Username: ${response.username}<br>
+                    Created at: ${new Date(response.created_at).toLocaleString()}<br>
+                    Expires at: ${new Date(response.expires_at).toLocaleString()}
+                </div>
+            `);
+            updateLifecycleChart(response);
+        } else {
+            $('#connectionStatus').html(`<div class="alert alert-danger">${response.message}</div>`);
+        }
+    });
+}
+
+function initializeLifecycleChart() {
+    const ctx = document.getElementById('credentialLifecycle').getContext('2d');
+    lifecycleChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Time Elapsed', 'Time Remaining'],
+            datasets: [{
+                data: [0, 100],
+                backgroundColor: ['#28a745', '#17a2b8']
+            }]
+        },
+        options: {
+            responsive: true,
+            cutout: '70%',
+            plugins: {
+                legend: {
+                    position: 'bottom'
+                }
+            }
+        }
+    });
+}
+
+function updateLifecycleChart(data) {
+    const now = new Date();
+    const createdAt = new Date(data.created_at);
+    const expiresAt = new Date(data.expires_at);
+    const totalTime = data.rotation_interval;
+    const elapsedTime = (now - createdAt) / 1000;
+    const remainingTime = totalTime - elapsedTime;
+
+    lifecycleChart.data.datasets[0].data = [elapsedTime, remainingTime];
+    lifecycleChart.update();
+
+    // Update chart every second
+    setInterval(() => {
+        const newElapsedTime = (new Date() - createdAt) / 1000;
+        const newRemainingTime = Math.max(0, totalTime - newElapsedTime);
+        lifecycleChart.data.datasets[0].data = [newElapsedTime, newRemainingTime];
+        lifecycleChart.update();
+    }, 1000);
+}
+
+function addRecord(e) {
+    e.preventDefault();
+    const data = {
+        name: $('#name').val(),
+        credit_card: $('#creditCard').val(),
+        ssn: $('#ssn').val()
+    };
+    $.ajax({
+        url: '/add-record',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify(data),
+        success: function(response) {
+            if (response.success) {
+                alert('Record added successfully');
+                $('#sensitiveDataForm')[0].reset();
+                loadRecentRecords();
+            } else {
+                alert('Error: ' + response.message);
+            }
+        }
+    });
+}
+
+function loadRecentRecords() {
+    $.get('/get-records', function(response) {
+        if (response.success) {
+            let html = '<ul class="list-group">';
+            response.records.forEach(record => {
+                html += `
+                    <li class="list-group-item">
+                        <strong>Name:</strong> ${record[1]}<br>
+                        <strong>Credit Card:</strong> ${record[2]}<br>
+                        <strong>SSN:</strong> ${record[3]}<br>
+                        <strong>Created:</strong> ${new Date(record[4]).toLocaleString()}
+                    </li>
+                `;
+            });
+            html += '</ul>';
+            $('#recentRecords').html(html);
+        } else {
+            $('#recentRecords').html('<div class="alert alert-danger">Error loading records</div>');
+        }
+    });
+}
+</script>
+{% endblock %}
