@@ -1,0 +1,21 @@
+body {
+    background-color: #f8f9fa;
+}
+
+.card {
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    margin-bottom: 20px;
+}
+
+#benefits li {
+    margin-bottom: 10px;
+}
+
+#credentialLifecycle {
+    max-width: 300px;
+    margin: 0 auto;
+}
+
+.list-group-item {
+    font-size: 0.9em;
+}
